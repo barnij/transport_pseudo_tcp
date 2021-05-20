@@ -7,6 +7,9 @@
 #include <string.h>
 #include <errno.h>
 #include "stuff.h"
+#define WINDOW_SIZE 15
+const uint32_t DATA_MAXSIZE = 1000;
+uint32_t act_start;
 
 bool is_valid_ip(char *ipAddress)
 {
@@ -17,7 +20,7 @@ bool is_valid_ip(char *ipAddress)
 
 bool is_number(char *str){
     for (int i = 0; str[i] != '\0'; i++) {
-        if(isdigit(str[i]) != 0){
+        if(isdigit(str[i]) == 0){
             return false;
         }
     }
@@ -33,19 +36,17 @@ struct data{
     bool        ready;
 };
 
-const int WINDOW_SIZE = 15;
-const int DATA_MAXSIZE = 1000;
 struct data window[WINDOW_SIZE];
 
-void send_get(int sockfd, uint16_t port, char *server_ip){
-    for(int k=0; k<WINDOW_SIZE; k++){
+int send_get(int sockfd, uint16_t port, char *server_ip){
+    for(int k=0; k<WINDOW_SIZE && window[k].length != 0; k++){
         struct sockaddr_in server_address;
         bzero(&server_address, sizeof(server_address));
         server_address.sin_family = AF_INET;
         server_address.sin_port = htons(port);
         inet_pton(AF_INET, server_ip, &server_address.sin_addr);
 
-        uint8_t buffer[100];
+        char buffer[100];
         sprintf(buffer, "GET %d %d\n", window[k].start, window[k].length);
         ssize_t buffer_size = strlen(buffer);
         if(sendto(sockfd, buffer, buffer_size, 0, (struct sockaddr*) &server_address, sizeof(server_address)) != buffer_size){
@@ -53,11 +54,13 @@ void send_get(int sockfd, uint16_t port, char *server_ip){
 		    return EXIT_FAILURE;
         }
     }
+
+    return EXIT_SUCCESS;
 }
 
-void prepare_window(uint32_t end){
-    uint32_t i=0;
-    for(int k=0; i<end && k<WINDOW_SIZE; k++){
+void prepare_window(int k, uint32_t end){
+    uint32_t i = act_start;
+    for(; i<end && k<WINDOW_SIZE; k++){
         window[k].start  = i;
         window[k].length = (i + DATA_MAXSIZE <= end) ? DATA_MAXSIZE : (end - i);
         
@@ -71,8 +74,23 @@ bool if_loop(){
     return true;
 }
 
+int32_t find_data(uint32_t start, uint32_t length){
+    for(int k=0; k<WINDOW_SIZE; k++){
+        if(window[k].start == start && window[k].length == length)
+            return k;
+    }
+    return -1;
+}
+
+void move_window(){
+    
+}
 
 int main(int argc, char* argv[]){
+
+    if(!is_number(argv[2])){
+        printf("TO!");
+    }
 
     if (argc != 5 || !is_valid_ip(argv[1]) || !is_number(argv[2]) || !is_number(argv[4])) {
         fprintf(stderr, "Input error.\n");
@@ -89,6 +107,18 @@ int main(int argc, char* argv[]){
 		return EXIT_FAILURE;
     }
 
+    struct sockaddr_in server_address;
+	bzero (&server_address, sizeof(server_address));
+	server_address.sin_family      = AF_INET;
+	server_address.sin_port        = htons(port);
+	server_address.sin_addr.s_addr = htonl(INADDR_ANY);
+	if (bind (sockfd, (struct sockaddr*)&server_address, sizeof(server_address)) < 0) {
+		fprintf(stderr, "bind error: %s\n", strerror(errno));
+		return EXIT_FAILURE;
+	}
+
+    prepare_window(0, 0, dest_length);
+
     struct timeval tv;
     tv.tv_sec = 4;
     tv.tv_usec = 0;
@@ -96,6 +126,7 @@ int main(int argc, char* argv[]){
     while(if_loop()) //dopóki nie mam wszystkich danych
     {
         // wyślij prośby o dane, których nie mamy
+        send_get(sockfd, port, server_ip);
 
         // odbieranie danych
         fd_set 	descriptors;
@@ -135,6 +166,35 @@ int main(int argc, char* argv[]){
 			fprintf(stderr, "recvfrom error: %s\n", strerror(errno));
 			return EXIT_FAILURE;
 		}
+
+        char sender_ip_str[20];
+        inet_ntop(AF_INET, &(sender.sin_addr), sender_ip_str, sizeof(sender_ip_str));
+
+        if(strcmp(sender_ip_str, server_ip) != 0){
+            continue;
+        }
+
+        buffer[datagram_len] = 0;
+        int posn = uint8_find(buffer, '\n');
+        if(posn == -1){
+            continue;
+        }
+
+        char header[50];
+        substr(header, buffer, 0, posn);
+        printf(header);
+        printf("\n");
+        uint32_t start, length;
+        sscanf(header, "%*s %d %d", &start, &length);
+
+        int posd = find_data(start, length);
+
+        if(posd < 0){
+            continue;
+        }
+
+        window[posd].ready = true;
+        window[posd].data  = buffer+posd; 
 
         // sprawdź czy możesz przesunąć okno i zapisać prefix okna do pliku
     }
