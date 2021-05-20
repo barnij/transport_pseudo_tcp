@@ -36,6 +36,7 @@ struct data{
     bool        ready;
 };
 
+const struct data empty_window;
 struct data window[WINDOW_SIZE];
 
 int send_get(int sockfd, uint16_t port, char *server_ip){
@@ -62,9 +63,13 @@ void prepare_window(int k, uint32_t end){
     uint32_t i = act_start;
     for(; i<end && k<WINDOW_SIZE; k++){
         window[k].start  = i;
+        act_start = i;
         window[k].length = (i + DATA_MAXSIZE <= end) ? DATA_MAXSIZE : (end - i);
         
         i += DATA_MAXSIZE;
+    }
+    for(;k<WINDOW_SIZE;k++){
+        window[k] = empty_window;
     }
 }
 
@@ -82,8 +87,22 @@ int32_t find_data(uint32_t start, uint32_t length){
     return -1;
 }
 
-void move_window(){
-    
+
+
+void move_window(uint32_t end, FILE * file){
+    int k=0;
+    if(!window[k].ready) return;
+    for(; k<WINDOW_SIZE && window[k].ready; k++){
+        if ((int)(fwrite(window[k].data, sizeof(uint8_t), window[k].length, f)) != frame_size){
+            fprintf(stderr, "fwrite error.\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+    int j=0;
+    for(; j+k<WINDOW_SIZE; j++){
+        window[j] = window[j+k];
+    }
+    prepare_window(j, end);
 }
 
 int main(int argc, char* argv[]){
@@ -99,7 +118,7 @@ int main(int argc, char* argv[]){
 
     char *server_ip = argv[1];
     uint16_t port   = (uint16_t)atoi(argv[2]);
-    int dest_length = atoi(argv[4]); 
+    int dest_length = atoi(argv[4]);
 
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
@@ -107,17 +126,24 @@ int main(int argc, char* argv[]){
 		return EXIT_FAILURE;
     }
 
-    struct sockaddr_in server_address;
-	bzero (&server_address, sizeof(server_address));
-	server_address.sin_family      = AF_INET;
-	server_address.sin_port        = htons(port);
-	server_address.sin_addr.s_addr = htonl(INADDR_ANY);
-	if (bind (sockfd, (struct sockaddr*)&server_address, sizeof(server_address)) < 0) {
-		fprintf(stderr, "bind error: %s\n", strerror(errno));
+    FILE * file = fopen(argv[3], "wb");
+    if (file == NULL)
+    {
+        fprintf(stderr, "fopen error: %s\n", strerror(errno)); 
 		return EXIT_FAILURE;
-	}
+    }
 
-    prepare_window(0, 0, dest_length);
+    // struct sockaddr_in server_address;
+	// bzero (&server_address, sizeof(server_address));
+	// server_address.sin_family      = AF_INET;
+	// server_address.sin_port        = htons(port);
+	// server_address.sin_addr.s_addr = htonl(INADDR_ANY);
+	// if (bind (sockfd, (struct sockaddr*)&server_address, sizeof(server_address)) < 0) {
+	// 	fprintf(stderr, "bind error: %s\n", strerror(errno));
+	// 	return EXIT_FAILURE;
+	// }
+
+    prepare_window(0, dest_length);
 
     struct timeval tv;
     tv.tv_sec = 4;
@@ -180,12 +206,15 @@ int main(int argc, char* argv[]){
             continue;
         }
 
-        char header[50];
+        char header[50], type[10];
         substr(header, buffer, 0, posn);
         printf(header);
         printf("\n");
         uint32_t start, length;
-        sscanf(header, "%*s %d %d", &start, &length);
+        sscanf(header, "%s %d %d", type, &start, &length);
+        if(strcmp(type,"DATA") != 0){
+            continue;
+        }
 
         int posd = find_data(start, length);
 
@@ -197,7 +226,10 @@ int main(int argc, char* argv[]){
         window[posd].data  = buffer+posd; 
 
         // sprawdź czy możesz przesunąć okno i zapisać prefix okna do pliku
+        move_window(dest_length);
     }
+
+    fclose(file);
 
     return EXIT_SUCCESS;
 }
