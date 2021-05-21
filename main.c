@@ -4,10 +4,8 @@
 #include <stdbool.h>
 #include <arpa/inet.h>
 #include <netinet/ip.h>
-#include <ctype.h>
 #include <string.h>
 #include <errno.h>
-#include <math.h>
 #include "stuff.h"
 #include "defines.h"
 #include "sender.h"
@@ -21,14 +19,14 @@ void prepare_window_start(uint32_t end);
 int32_t find_data(uint32_t start, uint32_t length);
 void move_window(uint32_t end, FILE * file);
 
-int main(int argc, char* argv[]){
+int main(int argc, char* argv[]) {
 
     if (argc > 6 || !is_valid_ip(argv[1]) || !is_number(argv[2]) || !is_number(argv[4])) {
         fprintf(stderr, "Input error.\n");
         return EXIT_FAILURE;
     }
 
-    if (argc == 6 && strcmp(argv[5],"progress")==0){
+    if (argc == 6 && strcmp(argv[5],"progress")==0) {
         progress = true;
     }
 
@@ -59,9 +57,8 @@ int main(int argc, char* argv[]){
     tv.tv_sec = 0;
     tv.tv_usec = 400;
 
-    while(to_save > 0)
-    {
-        if(send_get(sockfd, port, server_ip) == EXIT_FAILURE)
+    while(to_save > 0) {
+        if (send_get(window, sockfd, port, server_ip) == EXIT_FAILURE)
             return EXIT_FAILURE;
 
         fd_set 	descriptors;
@@ -105,15 +102,13 @@ int main(int argc, char* argv[]){
         char sender_ip_str[20];
         inet_ntop(AF_INET, &(sender.sin_addr), sender_ip_str, sizeof(sender_ip_str));
 
-        if(strcmp(sender_ip_str, server_ip) != 0){
+        if (strcmp(sender_ip_str, server_ip) != 0)
             continue;
-        }
 
         buffer[datagram_len] = 0;
         int posn = uint8_find(buffer, '\n');
-        if(posn == -1){
+        if (posn == -1)
             continue;
-        }
 
         char header[50], type[10];
         substr(header, buffer, 0, posn);
@@ -126,13 +121,11 @@ int main(int argc, char* argv[]){
 
         int posd = find_data(start, length);
 
-        if(posd < 0){
+        if (posd < 0)
             continue;
-        }
 
-        if(window[posd].ready){
+        if (window[posd].ready)
             continue;
-        }
 
 
         window[posd].ready = true;
@@ -147,15 +140,14 @@ int main(int argc, char* argv[]){
 }
 
 
-void move_window(uint32_t end, FILE * file){
-    if(!window[sit].ready) return;
-    if(small){
-        for(;window[sit].ready && sit<WINDOW_SIZE; sit++){
-            if(window[sit].length == 0){
+void move_window(uint32_t end, FILE * file) {
+    if (!window[sit].ready) return;
+    if (small) {
+        for (;window[sit].ready && sit<WINDOW_SIZE; sit++){
+            if (window[sit].length == 0)
                 return;
-            }
             
-            if(progress)
+            if (progress)
                 printf("saved from %d, %d bytes\n", window[sit].start, window[sit].length);
             if ((int)(fwrite(window[sit].data, sizeof(char), window[sit].length, file)) != (int)window[sit].length){
                 fprintf(stderr, "fwrite error.\n");
@@ -168,10 +160,10 @@ void move_window(uint32_t end, FILE * file){
 
 
     int k = 0, i = sit;
-    for(; k<WINDOW_SIZE && window[i].ready; k++){
+    for (; k<WINDOW_SIZE && window[i].ready; k++) {
         to_save -= window[i].length;
         
-        if(progress)
+        if (progress)
             printf("saved from %d, %d bytes\n", window[i].start, window[i].length);
         
         if ((int)(fwrite(window[i].data, sizeof(char), window[i].length, file)) != (int)window[i].length){
@@ -188,21 +180,20 @@ void move_window(uint32_t end, FILE * file){
     }
 
     sit = i;
-
 }
 
 
-int32_t find_data(uint32_t start, uint32_t length){
-    for(int k=0; k<WINDOW_SIZE; k++){
+int32_t find_data(uint32_t start, uint32_t length) {
+    for (int k=0; k<WINDOW_SIZE; k++) {
         if(window[k].start == start && window[k].length == length)
             return k;
     }
     return -1;
 }
 
-void prepare_window_start(uint32_t end){
+void prepare_window_start(uint32_t end) {
     int k=0;
-    for(uint32_t i = 0; i<end && k<WINDOW_SIZE; k++){
+    for (uint32_t i = 0; i<end && k<WINDOW_SIZE; k++) {
         window[k].start  = i;
         act_start        = i + DATA_MAX;
         window[k].length = (i + DATA_MAX <= end) ? DATA_MAX : (end - i);
