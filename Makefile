@@ -2,9 +2,9 @@ CC = gcc
 CFLAGS = -std=c11 -Wall -Wextra -D_GNU_SOURCE
 
 NAME = transport
-SRC = main.c stuff.c
+SRC = main2.c stuff.c
 DEPS = stuff.h
-OBJS = main.o stuff.o
+OBJS = main2.o stuff.o
 
 YOU :$(SRC) $(NAME)
 
