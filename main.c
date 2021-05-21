@@ -105,6 +105,9 @@ int main(int argc, char* argv[]) {
         if (strcmp(sender_ip_str, server_ip) != 0)
             continue;
 
+        if (ntohs(sender.sin_port) != port)
+            continue;
+
         buffer[datagram_len] = 0;
         int posn = uint8_find(buffer, '\n');
         if (posn == -1)
