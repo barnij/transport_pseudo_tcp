@@ -1,6 +1,9 @@
+// Bartosz Jaskiewicz, 307893
 #include <time.h>
 #include <stdint.h>
 #include <string.h>
+#include <arpa/inet.h>
+#include <stdbool.h>
 
 double get_time()
 {
@@ -22,3 +25,18 @@ void substr(char *sub, uint8_t *buff, int a, int n){
     sub[n]='\0';
 }
 
+bool is_number(char *str){
+    for (int i = 0; str[i] != '\0'; i++) {
+        if(isdigit(str[i]) == 0){
+            return false;
+        }
+    }
+    return true;
+}
+
+bool is_valid_ip(char *ipAddress)
+{
+    struct sockaddr_in sa;
+    int result = inet_pton(AF_INET, ipAddress, &(sa.sin_addr));
+    return result == 1;
+}
